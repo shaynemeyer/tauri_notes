@@ -26,12 +26,6 @@ async fn open_editor(handle: tauri::AppHandle, editor_id: &str) -> Result<(), ta
             editor_id,
             tauri::WindowUrl::App(("editor/".to_string() + editor_id).parse().unwrap()),
         )
-        // .menu(Menu::new().add_submenu(Submenu::new(
-        //     "File",
-        //     Menu::new().add_item(
-        //         CustomMenuItem::new("export", "Export file").accelerator("cmdOrControl+E"),
-        //     ),
-        // )))
         .menu(Menu::new().add_submenu(Submenu::new(
             "File",
             Menu::new().add_item(
