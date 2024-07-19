@@ -7,12 +7,11 @@ import {
   sendNotification,
 } from "@tauri-apps/api/notification";
 import { useLoaderData } from "react-router-dom";
-import Database from "tauri-plugin-sql-api";
-import { updateNoteDB } from "./db";
+import { updateNoteDB } from "../lib/db";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/api/dialog";
 import { writeTextFile } from "@tauri-apps/api/fs";
-import { dbName } from "./lib/constants";
+import { supabase } from "../lib/supabaseClient";
 
 export async function loader({
   params,
@@ -29,7 +28,6 @@ function Editor() {
   const { noteUUID } = useLoaderData() as unknown as { noteUUID: string };
   const [note, setNote] = useState("No text");
   const [isRendered, setRender] = useState(false);
-  const [db, setDb] = useState<Database | null>(null);
   const [menuEventPayload, setMenuEventPayload] = useState<{
     payload: string;
     id: string;
@@ -96,15 +94,18 @@ function Editor() {
   }
 
   async function loadNoteFromDB() {
-    const loadedDB = await Database.load(dbName);
-    const result = (await loadedDB.select(
-      "SELECT * FROM notes WHERE note_id = $1",
-      [noteUUID]
-    )) as { note_id: string; note_text: string }[];
+    const { data, error } = await supabase
+      .from("notes")
+      .select()
+      .eq("note_id", noteUUID);
 
-    setNote(result[0].note_text as string);
+    if (error) {
+      // todo: log error somewhere
+      console.log(error);
+      return;
+    }
 
-    setDb(loadedDB);
+    setNote(data[0].note_text as string);
   }
 
   async function renderMarkdown() {
@@ -153,11 +154,8 @@ function Editor() {
           <button
             className="btn btn-sm join-item"
             onClick={async () => {
-              if (!db) {
-                console.error("Database not loaded");
-                return;
-              }
-              await updateNoteDB(db, noteUUID, note);
+              await updateNoteDB(noteUUID, note);
+              window.close();
             }}
           >
             Save

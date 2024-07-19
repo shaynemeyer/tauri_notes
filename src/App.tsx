@@ -1,10 +1,9 @@
-import { ChangeEvent, useEffect, useState } from "react";
-import Database from "tauri-plugin-sql-api";
-import { getSearch, removeNoteDB, addNoteDB } from "./db";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { getSearch, removeNoteDB, addNoteDB } from "./lib/db";
 import { invoke } from "@tauri-apps/api";
 import { listen } from "@tauri-apps/api/event";
 import { Note } from "./lib/models";
-import { dbName } from "./lib/constants";
+import { supabase } from "./lib/supabaseClient";
 
 // interface Note {
 //    note_id: string; note_text: string
@@ -12,21 +11,47 @@ import { dbName } from "./lib/constants";
 
 function App() {
   const [notes, setNotes] = useState<Note[]>([]);
-  const [db, setDb] = useState<Database | null>(null);
   const [listOfOpenWindows, setListOfOpenWindows] = useState<string[]>([]);
 
+  const notesRef = useRef(notes);
+
   useEffect(() => {
-    createDB();
+    notesRef.current = notes;
+  }, [notes]);
+
+  useEffect(async () => {
+    loadNotes();
+
+    const RTNotes = supabase
+      .channel("custom-update-channel")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "notes",
+        },
+        (payload) => {
+          const tempArray = notesRef.current.map((obj) => {
+            if (obj.note_id === payload.old.note_id) {
+              return { ...obj, note_text: payload.new.note_text };
+            }
+            return obj;
+          });
+          setNotes(tempArray);
+        }
+      )
+      .subscribe();
+
+    return () => RTNotes.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (db === null) return;
-
     let unlistenPromises = [];
 
     unlistenPromises.push(
       listen("db", () => {
-        loadNotes(db);
+        loadNotes();
       })
     );
 
@@ -46,58 +71,31 @@ function App() {
         );
       });
     };
-  }, [db, listOfOpenWindows]);
-
-  async function createDB() {
-    const loadedDb = await Database.load(dbName);
-    if (!loadedDb) {
-      console.log("Failed to load database");
-      return;
-    }
-
-    const _first_load = await loadedDb.execute(
-      "CREATE TABLE IF NOT EXISTS notes (note_id CHAR NOT NULL PRIMARY KEY, note_text TEXT DEFAULT NULL);"
-    );
-    console.log(_first_load);
-
-    setDb(loadedDb);
-    loadNotes(loadedDb);
-  }
+  }, [listOfOpenWindows]);
 
   async function handleSearch(event: ChangeEvent<HTMLInputElement>) {
-    if (!db) {
-      console.log("Database not loaded");
-      return;
-    }
-    const result = await getSearch(db, event.target.value);
+    const result = await getSearch(event.target.value);
     if (result) {
       setNotes(result);
     }
   }
 
-  async function loadNotes(db: Database) {
-    const result = (await db.select("SELECT * FROM notes")) as Note[];
-    setNotes(result);
+  async function loadNotes() {
+    const { data, error } = await supabase.from("notes").select("*");
+    console.log(data);
+    if (data && !error) {
+      setNotes(data || []);
+    }
   }
 
   async function handleRemoveNote(uuid: string) {
-    if (!db) {
-      console.error("Database not loaded");
-      return;
-    }
-
-    await removeNoteDB(db, uuid);
-    await loadNotes(db);
+    await removeNoteDB(uuid);
+    await loadNotes();
   }
 
   async function handleAddNote() {
-    if (!db) {
-      console.error("Database not loaded");
-      return;
-    }
-    const newID = crypto.randomUUID();
-    await addNoteDB(db, newID, "");
-    await loadNotes(db);
+    await addNoteDB();
+    await loadNotes();
   }
 
   async function handleOpenWindow(uuid: string) {
@@ -126,9 +124,9 @@ function App() {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
             <path d="M5 12h14" />
             <path d="M12 5v14" />
@@ -165,9 +163,9 @@ function App() {
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
               <path d="M3 6h18" />
               <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />

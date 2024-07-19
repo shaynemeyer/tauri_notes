@@ -1,13 +1,13 @@
 import ReactDOM from "react-dom/client";
-import App from "./App";
 import "./styles.css";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import Editor, { loader } from "./Editor";
+import Editor, { loader } from "./components/Editor";
+import Login from "./Login";
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <App />,
+    element: <Login />,
   },
   {
     path: "/editor/:noteId",
