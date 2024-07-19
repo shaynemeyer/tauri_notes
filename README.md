@@ -8,7 +8,7 @@ This version using Supabase for auth & database.
 
 ```shell
 npm run tauri dev
-cargo tauri dev
+cargo tauri
 ```
 
 ## Build the app
